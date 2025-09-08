@@ -31,7 +31,10 @@
     <thead><tr><th>שדה</th><th>ערך שנמצא</th><th>סטטוס</th></tr></thead>
     <tbody></tbody>
   </table>
+  <a id="dl" class="small" style="display:none" download>הורד Word</a>
 
+  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.4.1/dist/html-docx.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
   <script type="module">
     // --- טעינת PDF.js מהאתר עם נפילה אוטומטית ל-CDN ---
     const loadPdfjs = async () => {
@@ -52,6 +55,7 @@
     const pdfjsLib = await loadPdfjs();
 
     const $status = document.getElementById('status');
+    const $dl = document.getElementById('dl');
     const setStatus = m => $status.textContent = m;
 
     // ===== עזרי RTL =====
@@ -64,6 +68,7 @@
       v.add(t.replace(/״/g,'"')); v.add(reverse(t.replace(/״/g,'"')));
       return [...v];
     };
+    const escapeHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
     const findNear = (text, keys, rx) => {
       for (const k of keys) {
         const i=text.indexOf(k);
@@ -110,24 +115,36 @@
       $tbody.appendChild(tr);
     };
 
+    async function processWord(text, file){
+      const html = '<p>'+escapeHtml(text).replace(/\n/g,'<br>')+'</p>';
+      const blob = window.htmlDocx.asBlob(html);
+      $dl.href = URL.createObjectURL(blob);
+      $dl.download = file.name.replace(/\.pdf$/i,'.docx');
+      $dl.style.display='inline';
+      const buf = await blob.arrayBuffer();
+      const { value } = await window.mammoth.extractRawText({ arrayBuffer: buf });
+      const t = clean(value);
+      const combined = t+'\n'+reverse(t);
+      fields.forEach(f=>addRow(f.label,findNear(combined,f.keys,f.rx)));
+      $table.style.display='';
+    }
+
     $run.addEventListener('click', async () => {
       const file = $file.files?.[0];
       if (!file) { setStatus('בחר/י קובץ PDF.'); return; }
-      $tbody.innerHTML=''; $table.style.display='none';
-      setStatus('טוען את ה-PDF ומחלץ טקסט…');
+      $tbody.innerHTML=''; $table.style.display='none'; $dl.style.display='none';
+      setStatus('ממיר ל-Word ומחלץ נתונים…');
 
       try {
-        // ניסיון רגיל (עם worker)
         const text = await extractTextFromPdf(file);
-        fields.forEach(f=>addRow(f.label,findNear(text,f.keys,f.rx)));
-        $table.style.display=''; setStatus('בוצע.');
+        await processWord(text, file);
+        setStatus('בוצע דרך Word.');
       } catch (err1) {
         console.warn('Worker probably blocked, retrying without worker…', err1);
         try {
-          // נפילה חכמה: בלי worker (יעבוד גם אם CSP/worker נחסם)
           const text = await extractTextFromPdf(file, { disableWorker: true });
-          fields.forEach(f=>addRow(f.label,findNear(text,f.keys,f.rx)));
-          $table.style.display=''; setStatus('בוצע (ללא Worker).');
+          await processWord(text, file);
+          setStatus('בוצע דרך Word (ללא Worker).');
         } catch (err2) {
           console.error(err2);
           setStatus('שגיאה בקריאת הקובץ. ודא/י שה-PDF טקסטואלי ושהקבצים ב-/vendor/pdfjs קיימים.');
