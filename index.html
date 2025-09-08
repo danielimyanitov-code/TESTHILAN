@@ -33,10 +33,23 @@
   </table>
 
   <script type="module">
-    // --- טוען את PDF.js מהאתר שלך (לא CDN) ---
-    import * as pdfjsLib from '/vendor/pdfjs/pdf.mjs';
-    // מנסה להגדיר worker לוקאלי
-    pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
+    // --- טעינת PDF.js מהאתר עם נפילה אוטומטית ל-CDN ---
+    const loadPdfjs = async () => {
+      const LOCAL = '/vendor/pdfjs/';
+      const CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/es5/build/';
+      try {
+        const lib = await import(LOCAL + 'pdf.mjs');
+        if (!lib?.GlobalWorkerOptions) throw new Error('bad local pdfjs');
+        lib.GlobalWorkerOptions.workerSrc = LOCAL + 'pdf.worker.mjs';
+        return lib;
+      } catch (err) {
+        console.warn('לא נמצא קובץ לוקאלי, יורד ל-CDN', err);
+        const lib = await import(CDN + 'pdf.mjs');
+        lib.GlobalWorkerOptions.workerSrc = CDN + 'pdf.worker.mjs';
+        return lib;
+      }
+    };
+    const pdfjsLib = await loadPdfjs();
 
     const $status = document.getElementById('status');
     const setStatus = m => $status.textContent = m;
