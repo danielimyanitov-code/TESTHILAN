@@ -2,21 +2,19 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <title>שליפת נתונים מדוח שעות PDF (ESM)</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>שליפת נתונים מדוח שעות PDF</title>
   <style>
-    body { font-family: system-ui, Arial, sans-serif; padding:20px; background:#f7f7f7; }
-    h1 { font-size:1.2rem; margin:0 0 12px; }
-    .card { background:#fff; border-radius:12px; padding:16px; box-shadow:0 2px 10px rgba(0,0,0,.06); }
-    .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; }
-    input[type=file] { padding:10px; border:1px solid #ddd; border-radius:8px; background:#fff; }
-    button { padding:10px 14px; border:0; border-radius:10px; cursor:pointer; background:#2b7cff; color:#fff; }
-    table { width:100%; border-collapse:collapse; margin-top:14px; background:#fff; }
-    th, td { border-bottom:1px solid #eee; padding:10px; text-align:right; }
-    th { background:#fafafa; }
-    .small { font-size:.9rem; color:#666; }
-    .ok { color:#0a7b10; }
-    .miss { color:#b00020; }
+    body{font-family:system-ui,Arial,sans-serif;padding:20px;background:#f7f7f7}
+    .card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
+    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+    input[type=file]{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff}
+    button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer;background:#2b7cff;color:#fff}
+    table{width:100%;border-collapse:collapse;margin-top:14px;background:#fff}
+    th,td{border-bottom:1px solid #eee;padding:10px;text-align:right}
+    th{background:#fafafa}
+    .small{font-size:.9rem;color:#666}
+    .ok{color:#0a7b10}.miss{color:#b00020}
   </style>
 </head>
 <body>
@@ -30,32 +28,19 @@
   </div>
 
   <table id="results" style="display:none">
-    <thead>
-      <tr>
-        <th>שדה</th>
-        <th>ערך שנמצא</th>
-        <th>סטטוס</th>
-      </tr>
-    </thead>
+    <thead><tr><th>שדה</th><th>ערך שנמצא</th><th>סטטוס</th></tr></thead>
     <tbody></tbody>
   </table>
 
-  <!-- טוען את pdf.js v4 כמודול מה-CDN (אין SRI, פחות תקלות) -->
   <script type="module">
     import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.mjs';
-    // חשוב: worker תואם לאותה גרסה
     pdfjsLib.GlobalWorkerOptions.workerSrc =
       'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.mjs';
 
-    // ===== עזרי RTL =====
-    const clean = s =>
-      s.replace(/\u200f|\u200e|\u202a|\u202b|\u202c|\u202d|\u202e/g, '')
-       .replace(/\s+/g, ' ')
-       .trim();
+    const clean = s => s.replace(/\u200f|\u200e|\u202a|\u202b|\u202c|\u202d|\u202e/g,'').replace(/\s+/g,' ').trim();
     const reverse = s => [...s].reverse().join('');
-    const variants = (term) => {
-      const v = new Set();
-      const t = clean(term);
+    const variants = term => {
+      const v=new Set, t=clean(term);
       v.add(t); v.add(reverse(t));
       v.add(t.replace(/"/g,'״')); v.add(reverse(t.replace(/"/g,'״')));
       v.add(t.replace(/״/g,'"')); v.add(reverse(t.replace(/״/g,'"')));
@@ -63,69 +48,60 @@
     };
     const findNear = (text, keys, rx) => {
       for (const k of keys) {
-        const i = text.indexOf(k);
-        if (i !== -1) {
-          const slice = text.slice(Math.max(0, i-60), i + k.length + 120);
-          const m = slice.match(rx);
-          if (m) return m[0];
-        }
+        const i=text.indexOf(k);
+        if (i!==-1){ const s=text.slice(Math.max(0,i-60), i+k.length+120); const m=s.match(rx); if(m) return m[0]; }
       }
       return null;
     };
-    const TIME = /\b\d{1,3}:\d{2}\b/;
-    const NUMBER = /\b\d+(?:\.\d+)?\b/;
 
-    const fields = [
-      { label: 'סה"כ לשכר',   keys: variants('סה"כ לשכר'),   rx: TIME },
-      { label: 'סה"כ נוכחות', keys: variants('סה"כ נוכחות'), rx: TIME },
-      { label: 'שעות תקן',     keys: variants('שעות תקן'),     rx: TIME },
-      { label: 'שעות 125%',    keys: variants('שעות 125%'),    rx: TIME },
-      { label: 'שעות 150%',    keys: variants('שעות 150%'),    rx: TIME },
-      { label: 'משמרת א',      keys: variants('משמרת א'),      rx: TIME },
-      { label: 'משמרת ב',      keys: variants('משמרת ב'),      rx: TIME },
-      { label: 'משמרת ג',      keys: variants('משמרת ג'),      rx: TIME },
-      { label: 'חופשה 481',    keys: [...variants('חופשה 481'), ...variants('481-חופשה')], rx: NUMBER },
-      { label: 'אש"ל 302',     keys: [...variants('302-אש"ל'), ...variants('אש"ל 302'), ...variants('302 אש"ל')], rx: NUMBER }
+    const TIME=/\b\d{1,3}:\d{2}\b/; const NUMBER=/\b\d+(?:\.\d+)?\b/;
+    const fields=[
+      {label:'סה"כ לשכר',keys:variants('סה"כ לשכר'),rx:TIME},
+      {label:'סה"כ נוכחות',keys:variants('סה"כ נוכחות'),rx:TIME},
+      {label:'שעות תקן',keys:variants('שעות תקן'),rx:TIME},
+      {label:'שעות 125%',keys:variants('שעות 125%'),rx:TIME},
+      {label:'שעות 150%',keys:variants('שעות 150%'),rx:TIME},
+      {label:'משמרת א',keys:variants('משמרת א'),rx:TIME},
+      {label:'משמרת ב',keys:variants('משמרת ב'),rx:TIME},
+      {label:'משמרת ג',keys:variants('משמרת ג'),rx:TIME},
+      {label:'חופשה 481',keys:[...variants('חופשה 481'),...variants('481-חופשה')],rx:NUMBER},
+      {label:'אש"ל 302',keys:[...variants('302-אש"ל'),...variants('אש"ל 302'),...variants('302 אש"ל')],rx:NUMBER},
     ];
 
-    async function extractTextFromPdf(file) {
-      const arrayBuf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: arrayBuf }).promise;
-      let full = '';
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        const txt = content.items.map(i => i.str).join(' ');
-        full += '\n' + txt;
+    async function extractTextFromPdf(file){
+      const buf=await file.arrayBuffer();
+      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
+      let full='';
+      for(let p=1;p<=pdf.numPages;p++){
+        const page=await pdf.getPage(p);
+        const content=await page.getTextContent();
+        full+='\n'+content.items.map(i=>i.str).join(' ');
       }
-      const normalized = clean(full);
-      const reversed = reverse(normalized);
-      return normalized + '\n' + reversed;
+      const n=clean(full), r=reverse(n);
+      return n+'\n'+r;
     }
 
-    const $file = document.getElementById('file');
-    const $run = document.getElementById('run');
-    const $status = document.getElementById('status');
-    const $table = document.getElementById('results');
-    const $tbody = $table.querySelector('tbody');
-    const setStatus = (m) => $status.textContent = m;
-
-    function addRow(name, value) {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${name}</td><td>${value ?? 'לא נמצא'}</td><td>${value ? '<span class="ok">נמצא</span>' : '<span class="miss">חסר</span>'}</td>`;
+    const $file=document.getElementById('file');
+    const $run=document.getElementById('run');
+    const $status=document.getElementById('status');
+    const $table=document.getElementById('results');
+    const $tbody=$table.querySelector('tbody');
+    const setStatus= m => $status.textContent=m;
+    const addRow=(name,value)=>{
+      const tr=document.createElement('tr');
+      tr.innerHTML=`<td>${name}</td><td>${value??'לא נמצא'}</td><td>${value?'<span class="ok">נמצא</span>':'<span class="miss">חסר</span>'}</td>`;
       $tbody.appendChild(tr);
-    }
+    };
 
-    $run.addEventListener('click', async () => {
-      const file = $file.files?.[0];
-      if (!file) { setStatus('בחר/י קובץ PDF.'); return; }
-      $tbody.innerHTML = ''; $table.style.display = 'none';
-      setStatus('טוען את ה-PDF ומחלץ טקסט…');
-      try {
-        const text = await extractTextFromPdf(file);
-        fields.forEach(f => addRow(f.label, findNear(text, f.keys, f.rx)));
-        $table.style.display = ''; setStatus('בוצע.');
-      } catch (e) { console.error(e); setStatus('שגיאה בקריאת הקובץ (PDF מוגן/פגום?).'); }
+    $run.addEventListener('click', async ()=>{
+      const file=$file.files?.[0];
+      if(!file){ setStatus('בחר/י קובץ PDF.'); return; }
+      $tbody.innerHTML=''; $table.style.display='none'; setStatus('טוען את ה-PDF ומחלץ טקסט…');
+      try{
+        const text=await extractTextFromPdf(file);
+        fields.forEach(f=>addRow(f.label,findNear(text,f.keys,f.rx)));
+        $table.style.display=''; setStatus('בוצע.');
+      }catch(e){ console.error(e); setStatus('שגיאה בקריאת הקובץ.'); }
     });
   </script>
 </body>
