@@ -33,10 +33,15 @@
   </table>
 
   <script type="module">
-    import * as pdfjsLib from 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.mjs';
-    pdfjsLib.GlobalWorkerOptions.workerSrc =
-      'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/build/pdf.worker.mjs';
+    // --- טוען את PDF.js מהאתר שלך (לא CDN) ---
+    import * as pdfjsLib from '/vendor/pdfjs/pdf.mjs';
+    // מנסה להגדיר worker לוקאלי
+    pdfjsLib.GlobalWorkerOptions.workerSrc = '/vendor/pdfjs/pdf.worker.mjs';
 
+    const $status = document.getElementById('status');
+    const setStatus = m => $status.textContent = m;
+
+    // ===== עזרי RTL =====
     const clean = s => s.replace(/\u200f|\u200e|\u202a|\u202b|\u202c|\u202d|\u202e/g,'').replace(/\s+/g,' ').trim();
     const reverse = s => [...s].reverse().join('');
     const variants = term => {
@@ -54,7 +59,8 @@
       return null;
     };
 
-    const TIME=/\b\d{1,3}:\d{2}\b/; const NUMBER=/\b\d+(?:\.\d+)?\b/;
+    const TIME=/\b\d{1,3}:\d{2}\b/;
+    const NUMBER=/\b\d+(?:\.\d+)?\b/;
     const fields=[
       {label:'סה"כ לשכר',keys:variants('סה"כ לשכר'),rx:TIME},
       {label:'סה"כ נוכחות',keys:variants('סה"כ נוכחות'),rx:TIME},
@@ -68,40 +74,52 @@
       {label:'אש"ל 302',keys:[...variants('302-אש"ל'),...variants('אש"ל 302'),...variants('302 אש"ל')],rx:NUMBER},
     ];
 
-    async function extractTextFromPdf(file){
-      const buf=await file.arrayBuffer();
-      const pdf=await pdfjsLib.getDocument({data:buf}).promise;
-      let full='';
-      for(let p=1;p<=pdf.numPages;p++){
-        const page=await pdf.getPage(p);
-        const content=await page.getTextContent();
-        full+='\n'+content.items.map(i=>i.str).join(' ');
+    async function extractTextFromPdf(file, opts = {}) {
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: buf, ...opts }).promise;
+      let full = '';
+      for (let p = 1; p <= pdf.numPages; p++) {
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        full += '\n' + content.items.map(i => i.str).join(' ');
       }
-      const n=clean(full), r=reverse(n);
-      return n+'\n'+r;
+      const n = clean(full), r = reverse(n);
+      return n + '\n' + r;
     }
 
-    const $file=document.getElementById('file');
-    const $run=document.getElementById('run');
-    const $status=document.getElementById('status');
-    const $table=document.getElementById('results');
-    const $tbody=$table.querySelector('tbody');
-    const setStatus= m => $status.textContent=m;
-    const addRow=(name,value)=>{
+    const $file = document.getElementById('file');
+    const $run = document.getElementById('run');
+    const $table = document.getElementById('results');
+    const $tbody = $table.querySelector('tbody');
+    const addRow = (name,value)=>{
       const tr=document.createElement('tr');
       tr.innerHTML=`<td>${name}</td><td>${value??'לא נמצא'}</td><td>${value?'<span class="ok">נמצא</span>':'<span class="miss">חסר</span>'}</td>`;
       $tbody.appendChild(tr);
     };
 
-    $run.addEventListener('click', async ()=>{
-      const file=$file.files?.[0];
-      if(!file){ setStatus('בחר/י קובץ PDF.'); return; }
-      $tbody.innerHTML=''; $table.style.display='none'; setStatus('טוען את ה-PDF ומחלץ טקסט…');
-      try{
-        const text=await extractTextFromPdf(file);
+    $run.addEventListener('click', async () => {
+      const file = $file.files?.[0];
+      if (!file) { setStatus('בחר/י קובץ PDF.'); return; }
+      $tbody.innerHTML=''; $table.style.display='none';
+      setStatus('טוען את ה-PDF ומחלץ טקסט…');
+
+      try {
+        // ניסיון רגיל (עם worker)
+        const text = await extractTextFromPdf(file);
         fields.forEach(f=>addRow(f.label,findNear(text,f.keys,f.rx)));
         $table.style.display=''; setStatus('בוצע.');
-      }catch(e){ console.error(e); setStatus('שגיאה בקריאת הקובץ.'); }
+      } catch (err1) {
+        console.warn('Worker probably blocked, retrying without worker…', err1);
+        try {
+          // נפילה חכמה: בלי worker (יעבוד גם אם CSP/worker נחסם)
+          const text = await extractTextFromPdf(file, { disableWorker: true });
+          fields.forEach(f=>addRow(f.label,findNear(text,f.keys,f.rx)));
+          $table.style.display=''; setStatus('בוצע (ללא Worker).');
+        } catch (err2) {
+          console.error(err2);
+          setStatus('שגיאה בקריאת הקובץ. ודא/י שה-PDF טקסטואלי ושהקבצים ב-/vendor/pdfjs קיימים.');
+        }
+      }
     });
   </script>
 </body>
