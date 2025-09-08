@@ -111,7 +111,8 @@
     const $tbody = $table.querySelector('tbody');
     const addRow = (name,value)=>{
       const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${name}</td><td>${value??'לא נמצא'}</td><td>${value?'<span class="ok">נמצא</span>':'<span class="miss">חסר</span>'}</td>`;
+      const found = value != null;
+      tr.innerHTML=`<td>${name}</td><td>${found?value:'לא נמצא'}</td><td>${found?'<span class="ok">נמצא</span>':'<span class="miss">חסר</span>'}</td>`;
       $tbody.appendChild(tr);
     };
 
