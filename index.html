@@ -2,155 +2,203 @@
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>שליפת נתונים מדוח שעות PDF</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>ממיר PDF → Word → חילוץ טקסט (לקוח בלבד)</title>
   <style>
-    body{font-family:system-ui,Arial,sans-serif;padding:20px;background:#f7f7f7}
-    .card{background:#fff;border-radius:12px;padding:16px;box-shadow:0 2px 10px rgba(0,0,0,.06)}
-    .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
-    input[type=file]{padding:10px;border:1px solid #ddd;border-radius:8px;background:#fff}
-    button{padding:10px 14px;border:0;border-radius:10px;cursor:pointer;background:#2b7cff;color:#fff}
-    table{width:100%;border-collapse:collapse;margin-top:14px;background:#fff}
-    th,td{border-bottom:1px solid #eee;padding:10px;text-align:right}
-    th{background:#fafafa}
-    .small{font-size:.9rem;color:#666}
-    .ok{color:#0a7b10}.miss{color:#b00020}
+    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--accent:#22c55e;--danger:#ef4444;--border:#1f2937}
+    html,body{height:100%}
+    body{margin:0;background:linear-gradient(180deg,#0b1022,#0f172a 25%,#0b1022);color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
+    .wrap{max-width:960px;margin:40px auto;padding:24px}
+    .card{background:rgba(255,255,255,.04);backdrop-filter: blur(6px);border:1px solid var(--border);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.30)}
+    .hdr{padding:22px 24px;border-bottom:1px solid var(--border)}
+    .hdr h1{margin:0;font-size:clamp(20px,3vw,28px)}
+    .body{padding:18px 24px}
+    .row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
+    .row > *{flex:0 0 auto}
+    .grow{flex:1 1 auto}
+    .file{display:flex;align-items:center;gap:10px}
+    input[type="file"]{accent-color:var(--accent)}
+    button{border:0;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer;transition:.2s transform,.2s opacity;background:var(--accent);color:#04130a}
+    button:disabled{opacity:.5;cursor:not-allowed}
+    .ghost{background:#1f2937;color:#e5e7eb}
+    .muted{color:var(--muted)}
+    .status{min-height:24px;margin-top:10px;font-size:14px}
+    .err{color:var(--danger)}
+    .grid{display:grid;grid-template-columns:1fr;gap:16px}
+    @media (min-width:900px){.grid{grid-template-columns:1fr 1fr}}
+    textarea{width:100%;min-height:340px;border-radius:14px;border:1px solid var(--border);background:#0b1222;color:#cbd5e1;padding:14px;resize:vertical;line-height:1.55}
+    .downloads a{display:inline-block;margin-inline-end:10px;margin-block:6px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;color:#e5e7eb;text-decoration:none}
+    .small{font-size:12px}
+    .spinner{display:inline-block;width:16px;height:16px;border:2px solid #94a3b8;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:-3px;margin-inline-start:6px}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .tip{background:#071022;border:1px dashed #22324b;padding:10px 12px;border-radius:12px}
   </style>
+  <!-- PDF.js -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js" integrity="sha512-Fk8Q1c0k4j5YkLx7xYk7P4xSvMJ1F1Y0l8K0lJ8U5t3axw1c7Q0yHtkA1n7yQz7uQb8m9L9F1i1l3uM8QKc2pA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- docx.js (ליצירת DOCX בצד לקוח) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.js" integrity="sha512-2H986Q3qv2mFQ8mGgYJqCzH5m8V7z6F0xw4t0Z8TQd2U5l+8kRr0m3yM1Vt5xRk4k1Xl9S1YwO8v6m1NQ3xvWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
-  <div class="card">
-    <h1>מעלה PDF ⇒ שליפת נתונים</h1>
-    <div class="row">
-      <input id="file" type="file" accept="application/pdf" />
-      <button id="run">שלוף נתונים</button>
+  <div class="wrap">
+    <div class="card">
+      <div class="hdr">
+        <h1>ממיר PDF → Word → חילוץ טקסט (דפדפן, ללא שרת)</h1>
+        <div class="muted small">העלו קובץ PDF, נקבל ממנו טקסט בעזרת PDF.js, ניצור קובץ DOCX לתיעוד/שיתוף, ונציג את הטקסט שחולץ.</div>
+      </div>
+      <div class="body">
+        <div class="row">
+          <label class="file">
+            <input id="fileInput" type="file" accept="application/pdf" />
+          </label>
+          <button id="runBtn" disabled>המר והצע טקסט</button>
+          <button id="clearBtn" class="ghost">נקה</button>
+          <span id="status" class="status muted"></span>
+        </div>
+
+        <div class="grid" style="margin-top:18px">
+          <section>
+            <h3 style="margin:6px 0 10px">טקסט שחולץ</h3>
+            <textarea id="output" placeholder="הטקסט מה-PDF יופיע כאן…"></textarea>
+            <div class="downloads" id="downloads"></div>
+            <div class="tip small">הערה: יצירת ה‑DOCX כאן מבוססת על הטקסט בלבד (לא עימוד/טבלאות). עבור שחזור מבנה עשיר יש צורך בכלי המרה ייעודיים בצד‑שרת.</div>
+          </section>
+          <section>
+            <h3 style="margin:6px 0 10px">מידע ועקיבה</h3>
+            <div class="tip small" id="meta">—</div>
+          </section>
+        </div>
+      </div>
     </div>
-    <div id="status" class="small" style="margin-top:8px;"></div>
   </div>
 
-  <table id="results" style="display:none">
-    <thead><tr><th>שדה</th><th>ערך שנמצא</th><th>סטטוס</th></tr></thead>
-    <tbody></tbody>
-  </table>
-  <a id="dl" class="small" style="display:none" download>הורד Word</a>
+<script>
+(function(){
+  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  // קביעת worker ל-PDF.js (אותה גרסה כמו הספרייה)
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js';
 
-  <script src="https://cdn.jsdelivr.net/npm/html-docx-js@0.4.1/dist/html-docx.min.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/mammoth@1.6.0/mammoth.browser.min.js"></script>
-  <script type="module">
-    // --- טעינת PDF.js מהאתר עם נפילה אוטומטית ל-CDN ---
-    const loadPdfjs = async () => {
-      const LOCAL = '/vendor/pdfjs/';
-      const CDN = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.8.69/es5/build/';
-      try {
-        const lib = await import(LOCAL + 'pdf.mjs');
-        if (!lib?.GlobalWorkerOptions) throw new Error('bad local pdfjs');
-        lib.GlobalWorkerOptions.workerSrc = LOCAL + 'pdf.worker.mjs';
-        return lib;
-      } catch (err) {
-        console.warn('לא נמצא קובץ לוקאלי, יורד ל-CDN', err);
-        const lib = await import(CDN + 'pdf.mjs');
-        lib.GlobalWorkerOptions.workerSrc = CDN + 'pdf.worker.mjs';
-        return lib;
-      }
-    };
-    const pdfjsLib = await loadPdfjs();
+  const { Document, Packer, Paragraph, TextRun, AlignmentType } = window.docx;
 
-    const $status = document.getElementById('status');
-    const $dl = document.getElementById('dl');
-    const setStatus = m => $status.textContent = m;
+  const qs = s=>document.querySelector(s);
+  const fileInput = qs('#fileInput');
+  const runBtn = qs('#runBtn');
+  const clearBtn = qs('#clearBtn');
+  const status = qs('#status');
+  const out = qs('#output');
+  const meta = qs('#meta');
+  const downloads = qs('#downloads');
 
-    // ===== עזרי RTL =====
-    const clean = s => s.replace(/\u200f|\u200e|\u202a|\u202b|\u202c|\u202d|\u202e/g,'').replace(/\s+/g,' ').trim();
-    const reverse = s => [...s].reverse().join('');
-    const variants = term => {
-      const v=new Set, t=clean(term);
-      v.add(t); v.add(reverse(t));
-      v.add(t.replace(/"/g,'״')); v.add(reverse(t.replace(/"/g,'״')));
-      v.add(t.replace(/״/g,'"')); v.add(reverse(t.replace(/״/g,'"')));
-      return [...v];
-    };
-    const escapeHtml = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const findNear = (text, keys, rx) => {
-      for (const k of keys) {
-        const i=text.indexOf(k);
-        if (i!==-1){ const s=text.slice(Math.max(0,i-60), i+k.length+120); const m=s.match(rx); if(m) return m[0]; }
-      }
-      return null;
-    };
+  let currentFile = null;
 
-    const TIME=/\b\d{1,3}:\d{2}\b/;
-    const NUMBER=/\b\d+(?:\.\d+)?\b/;
-    const fields=[
-      {label:'סה"כ לשכר',keys:variants('סה"כ לשכר'),rx:TIME},
-      {label:'סה"כ נוכחות',keys:variants('סה"כ נוכחות'),rx:TIME},
-      {label:'שעות תקן',keys:variants('שעות תקן'),rx:TIME},
-      {label:'שעות 125%',keys:variants('שעות 125%'),rx:TIME},
-      {label:'שעות 150%',keys:variants('שעות 150%'),rx:TIME},
-      {label:'משמרת א',keys:variants('משמרת א'),rx:TIME},
-      {label:'משמרת ב',keys:variants('משמרת ב'),rx:TIME},
-      {label:'משמרת ג',keys:variants('משמרת ג'),rx:TIME},
-      {label:'חופשה 481',keys:[...variants('חופשה 481'),...variants('481-חופשה')],rx:NUMBER},
-      {label:'אש"ל 302',keys:[...variants('302-אש"ל'),...variants('אש"ל 302'),...variants('302 אש"ל')],rx:NUMBER},
-    ];
+  fileInput.addEventListener('change', () => {
+    currentFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
+    runBtn.disabled = !currentFile;
+    downloads.innerHTML = '';
+    out.value = '';
+    meta.textContent = currentFile ? `קובץ נבחר: ${currentFile.name} (${(currentFile.size/1024).toFixed(1)}KB)` : '—';
+  });
 
-    async function extractTextFromPdf(file, opts = {}) {
-      const buf = await file.arrayBuffer();
-      const pdf = await pdfjsLib.getDocument({ data: buf, ...opts }).promise;
-      let full = '';
-      for (let p = 1; p <= pdf.numPages; p++) {
-        const page = await pdf.getPage(p);
-        const content = await page.getTextContent();
-        full += '\n' + content.items.map(i => i.str).join(' ');
-      }
-      const n = clean(full), r = reverse(n);
-      return n + '\n' + r;
+  clearBtn.addEventListener('click', () => {
+    fileInput.value = '';
+    currentFile = null;
+    runBtn.disabled = true;
+    status.textContent = '';
+    downloads.innerHTML = '';
+    out.value = '';
+    meta.textContent = '—';
+  });
+
+  runBtn.addEventListener('click', async () => {
+    if(!currentFile) return;
+    try {
+      setStatus('קורא את ה‑PDF…', true);
+      const { text, pages } = await extractTextFromPDF(currentFile);
+
+      setStatus('יוצר מסמך Word (DOCX)…', true);
+      const docxBlob = await buildDocxFromText(text, { rtl: true, pages });
+
+      setStatus('מוכן!');
+      out.value = text;
+      renderDownloads(docxBlob, text, currentFile.name);
+      meta.innerHTML = `מספר עמודים: <b>${pages}</b><br/>תאריך עיבוד: <b>${new Date().toLocaleString()}</b>`;
+    } catch(err){
+      console.error(err);
+      setStatus('אירעה שגיאה: ' + (err && err.message ? err.message : err), false, true);
+    }
+  });
+
+  function setStatus(msg, busy=false, isErr=false){
+    status.innerHTML = msg + (busy ? ' <span class="spinner"></span>' : '');
+    status.classList.toggle('err', !!isErr);
+  }
+
+  async function extractTextFromPDF(file){
+    const buf = await file.arrayBuffer();
+    const loadingTask = pdfjsLib.getDocument({ data: buf });
+    const pdf = await loadingTask.promise;
+    const pages = pdf.numPages;
+
+    let all = [];
+    for(let i=1;i<=pages;i++){
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      // חיבור פריטי הטקסט; אין שחזור עימוד מלא, אך נפריד עמודים
+      const line = content.items.map(it => it.str).join(' ');
+      all.push(`=== עמוד ${i} ===\n` + line.trim());
+    }
+    return { text: all.join('\n\n'), pages };
+  }
+
+  async function buildDocxFromText(text, { rtl=false, pages=0 }={}){
+    // פיצול לפסקאות לפי שורות
+    const paragraphs = [];
+    const lines = text.split(/\n/);
+    for(const ln of lines){
+      paragraphs.push(new Paragraph({
+        children:[ new TextRun({ text: ln }) ],
+        rightToLeft: rtl,
+        alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+      }));
     }
 
-    const $file = document.getElementById('file');
-    const $run = document.getElementById('run');
-    const $table = document.getElementById('results');
-    const $tbody = $table.querySelector('tbody');
-    const addRow = (name,value)=>{
-      const tr=document.createElement('tr');
-      tr.innerHTML=`<td>${name}</td><td>${value??'לא נמצא'}</td><td>${value?'<span class="ok">נמצא</span>':'<span class="miss">חסר</span>'}</td>`;
-      $tbody.appendChild(tr);
-    };
-
-    async function processWord(text, file){
-      const html = '<p>'+escapeHtml(text).replace(/\n/g,'<br>')+'</p>';
-      const blob = window.htmlDocx.asBlob(html);
-      $dl.href = URL.createObjectURL(blob);
-      $dl.download = file.name.replace(/\.pdf$/i,'.docx');
-      $dl.style.display='inline';
-      const buf = await blob.arrayBuffer();
-      const { value } = await window.mammoth.extractRawText({ arrayBuffer: buf });
-      const t = clean(value);
-      const combined = t+'\n'+reverse(t);
-      fields.forEach(f=>addRow(f.label,findNear(combined,f.keys,f.rx)));
-      $table.style.display='';
-    }
-
-    $run.addEventListener('click', async () => {
-      const file = $file.files?.[0];
-      if (!file) { setStatus('בחר/י קובץ PDF.'); return; }
-      $tbody.innerHTML=''; $table.style.display='none'; $dl.style.display='none';
-      setStatus('ממיר ל-Word ומחלץ נתונים…');
-
-      try {
-        const text = await extractTextFromPdf(file);
-        await processWord(text, file);
-        setStatus('בוצע דרך Word.');
-      } catch (err1) {
-        console.warn('Worker probably blocked, retrying without worker…', err1);
-        try {
-          const text = await extractTextFromPdf(file, { disableWorker: true });
-          await processWord(text, file);
-          setStatus('בוצע דרך Word (ללא Worker).');
-        } catch (err2) {
-          console.error(err2);
-          setStatus('שגיאה בקריאת הקובץ. ודא/י שה-PDF טקסטואלי ושהקבצים ב-/vendor/pdfjs קיימים.');
-        }
-      }
+    const doc = new Document({
+      sections: [{
+        properties: {},
+        children: [
+          new Paragraph({
+            children:[ new TextRun({ text: 'טקסט שחולץ מקובץ PDF', bold: true }) ],
+            spacing: { after: 200 },
+            rightToLeft: rtl,
+            alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
+          }),
+          ...paragraphs
+        ]
+      }]
     });
-  </script>
+
+    return await Packer.toBlob(doc);
+  }
+
+  function renderDownloads(docxBlob, text, baseName){
+    downloads.innerHTML = '';
+    // קובץ DOCX
+    const docxUrl = URL.createObjectURL(docxBlob);
+    const docxA = document.createElement('a');
+    docxA.href = docxUrl;
+    docxA.download = (baseName.replace(/\.pdf$/i,'') || 'output') + '.docx';
+    docxA.textContent = 'הורד DOCX';
+    downloads.appendChild(docxA);
+
+    // קובץ TXT
+    const txtBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+    const txtUrl = URL.createObjectURL(txtBlob);
+    const txtA = document.createElement('a');
+    txtA.href = txtUrl;
+    txtA.download = (baseName.replace(/\.pdf$/i,'') || 'output') + '.txt';
+    txtA.textContent = 'הורד TXT';
+    downloads.appendChild(txtA);
+  }
+})();
+</script>
 </body>
 </html>
