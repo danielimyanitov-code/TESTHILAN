@@ -34,9 +34,9 @@
     .tip{background:#071022;border:1px dashed #22324b;padding:10px 12px;border-radius:12px}
   </style>
   <!-- PDF.js -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.min.js" integrity="sha512-Fk8Q1c0k4j5YkLx7xYk7P4xSvMJ1F1Y0l8K0lJ8U5t3axw1c7Q0yHtkA1n7yQz7uQb8m9L9F1i1l3uM8QKc2pA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
   <!-- docx.js (ליצירת DOCX בצד לקוח) -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/docx/8.5.0/docx.umd.js" integrity="sha512-2H986Q3qv2mFQ8mGgYJqCzH5m8V7z6F0xw4t0Z8TQd2U5l+8kRr0m3yM1Vt5xRk4k1Xl9S1YwO8v6m1NQ3xvWA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
 </head>
 <body>
   <div class="wrap">
@@ -73,9 +73,9 @@
 
 <script>
 (function(){
-  const pdfjsLib = window['pdfjs-dist/build/pdf'];
+  const pdfjsLib = window['pdfjsLib'];
   // קביעת worker ל-PDF.js (אותה גרסה כמו הספרייה)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.5.136/pdf.worker.min.js';
+  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
 
   const { Document, Packer, Paragraph, TextRun, AlignmentType } = window.docx;
 
