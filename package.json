@@ -1,6 +1,6 @@
 {
   "name": "hilan-salary-calculator",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Hilan payroll calculator",
   "private": true,
   "scripts": {
