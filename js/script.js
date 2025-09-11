@@ -1,8 +1,7 @@
-// Version 1.0.1
-import * as pdfjsLib from 'https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.mjs';
-
+// Version 1.0.2
+const pdfjsLib = window.pdfjsLib;
 pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.worker.min.mjs';
+  'https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
 
 // ===== נתונים =====
 const CODE_MAP = {
