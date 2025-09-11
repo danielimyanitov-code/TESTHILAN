@@ -1,204 +1,58 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>ממיר PDF → Word → חילוץ טקסט (לקוח בלבד)</title>
-  <style>
-    :root{--bg:#0f172a;--card:#111827;--muted:#94a3b8;--accent:#22c55e;--danger:#ef4444;--border:#1f2937}
-    html,body{height:100%}
-    body{margin:0;background:linear-gradient(180deg,#0b1022,#0f172a 25%,#0b1022);color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji"}
-    .wrap{max-width:960px;margin:40px auto;padding:24px}
-    .card{background:rgba(255,255,255,.04);backdrop-filter: blur(6px);border:1px solid var(--border);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.30)}
-    .hdr{padding:22px 24px;border-bottom:1px solid var(--border)}
-    .hdr h1{margin:0;font-size:clamp(20px,3vw,28px)}
-    .body{padding:18px 24px}
-    .row{display:flex;flex-wrap:wrap;gap:14px;align-items:center}
-    .row > *{flex:0 0 auto}
-    .grow{flex:1 1 auto}
-    .file{display:flex;align-items:center;gap:10px}
-    input[type="file"]{accent-color:var(--accent)}
-    button{border:0;border-radius:12px;padding:10px 16px;font-weight:600;cursor:pointer;transition:.2s transform,.2s opacity;background:var(--accent);color:#04130a}
-    button:disabled{opacity:.5;cursor:not-allowed}
-    .ghost{background:#1f2937;color:#e5e7eb}
-    .muted{color:var(--muted)}
-    .status{min-height:24px;margin-top:10px;font-size:14px}
-    .err{color:var(--danger)}
-    .grid{display:grid;grid-template-columns:1fr;gap:16px}
-    @media (min-width:900px){.grid{grid-template-columns:1fr 1fr}}
-    textarea{width:100%;min-height:340px;border-radius:14px;border:1px solid var(--border);background:#0b1222;color:#cbd5e1;padding:14px;resize:vertical;line-height:1.55}
-    .downloads a{display:inline-block;margin-inline-end:10px;margin-block:6px;padding:8px 12px;border:1px solid var(--border);border-radius:10px;color:#e5e7eb;text-decoration:none}
-    .small{font-size:12px}
-    .spinner{display:inline-block;width:16px;height:16px;border:2px solid #94a3b8;border-top-color:transparent;border-radius:50%;animation:spin 1s linear infinite;vertical-align:-3px;margin-inline-start:6px}
-    @keyframes spin{to{transform:rotate(360deg)}}
-    .tip{background:#071022;border:1px dashed #22324b;padding:10px 12px;border-radius:12px}
-  </style>
-  <!-- PDF.js -->
-  <script src="https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
-  <!-- docx.js (ליצירת DOCX בצד לקוח) -->
-  <script src="https://unpkg.com/docx@8.5.0/build/index.umd.js"></script>
+  <title>מחשבון שכר חילן</title>
+  <link rel="stylesheet" href="css/style.css" />
 </head>
 <body>
-  <div class="wrap">
-    <div class="card">
-      <div class="hdr">
-        <h1>ממיר PDF → Word → חילוץ טקסט (דפדפן, ללא שרת)</h1>
-        <div class="muted small">העלו קובץ PDF, נקבל ממנו טקסט בעזרת PDF.js, ניצור קובץ DOCX לתיעוד/שיתוף, ונציג את הטקסט שחולץ.</div>
+  <main class="salary-calculator">
+    <header class="salary-calculator__header">
+      <h1>מחשבון שכר חילן</h1>
+    </header>
+
+    <section class="upload-section" aria-label="העלאת דוח">
+      <div id="dropZone" class="upload-section__zone" tabindex="0" role="button">
+        גררו קובץ PDF או לחצו לבחירה
+        <input id="fileInput" type="file" accept="application/pdf" hidden />
       </div>
-      <div class="body">
-        <div class="row">
-          <label class="file">
-            <input id="fileInput" type="file" accept="application/pdf" />
-          </label>
-          <button id="runBtn" disabled>המר והצע טקסט</button>
-          <button id="clearBtn" class="ghost">נקה</button>
-          <span id="status" class="status muted"></span>
-        </div>
+    </section>
 
-        <div class="grid" style="margin-top:18px">
-          <section>
-            <h3 style="margin:6px 0 10px">טקסט שחולץ</h3>
-            <textarea id="output" placeholder="הטקסט מה-PDF יופיע כאן…"></textarea>
-            <div class="downloads" id="downloads"></div>
-            <div class="tip small">הערה: יצירת ה‑DOCX כאן מבוססת על הטקסט בלבד (לא עימוד/טבלאות). עבור שחזור מבנה עשיר יש צורך בכלי המרה ייעודיים בצד‑שרת.</div>
-          </section>
-          <section>
-            <h3 style="margin:6px 0 10px">מידע ועקיבה</h3>
-            <div class="tip small" id="meta">—</div>
-          </section>
-        </div>
-      </div>
-    </div>
-  </div>
+    <section class="controls" aria-label="הגדרות חישוב">
+      <label for="baseRate" class="controls__label">תעריף בסיס (₪ לשעה)</label>
+      <input id="baseRate" type="number" step="0.01" value="0" class="controls__input" />
+    </section>
 
-<script>
-(function(){
-  const pdfjsLib = window['pdfjsLib'];
-  // קביעת worker ל-PDF.js (אותה גרסה כמו הספרייה)
-  pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
+    <section class="calculator-section" aria-label="חישוב שכר">
+      <table class="salary-table" role="table">
+        <thead>
+          <tr>
+            <th>קוד</th>
+            <th>תיאור</th>
+            <th>שעות</th>
+            <th>אחוז</th>
+            <th>סה"כ</th>
+          </tr>
+        </thead>
+        <tbody id="salaryBody"></tbody>
+        <tfoot>
+          <tr>
+            <td colspan="4">סה"כ הכל</td>
+            <td id="totalSalary">₪0.00</td>
+          </tr>
+        </tfoot>
+      </table>
+    </section>
 
-  const { Document, Packer, Paragraph, TextRun, AlignmentType } = window.docx;
+    <section class="actions" aria-label="פעולות">
+      <button id="exportBtn" class="actions__btn">ייצוא CSV</button>
+      <button id="clearBtn" class="actions__btn actions__btn--ghost">ניקוי</button>
+    </section>
 
-  const qs = s=>document.querySelector(s);
-  const fileInput = qs('#fileInput');
-  const runBtn = qs('#runBtn');
-  const clearBtn = qs('#clearBtn');
-  const status = qs('#status');
-  const out = qs('#output');
-  const meta = qs('#meta');
-  const downloads = qs('#downloads');
+    <div id="status" class="status" role="alert" aria-live="polite"></div>
+  </main>
 
-  let currentFile = null;
-
-  fileInput.addEventListener('change', () => {
-    currentFile = fileInput.files && fileInput.files[0] ? fileInput.files[0] : null;
-    runBtn.disabled = !currentFile;
-    downloads.innerHTML = '';
-    out.value = '';
-    meta.textContent = currentFile ? `קובץ נבחר: ${currentFile.name} (${(currentFile.size/1024).toFixed(1)}KB)` : '—';
-  });
-
-  clearBtn.addEventListener('click', () => {
-    fileInput.value = '';
-    currentFile = null;
-    runBtn.disabled = true;
-    status.textContent = '';
-    downloads.innerHTML = '';
-    out.value = '';
-    meta.textContent = '—';
-  });
-
-  runBtn.addEventListener('click', async () => {
-    if(!currentFile) return;
-    try {
-      setStatus('קורא את ה‑PDF…', true);
-      const { text, pages } = await extractTextFromPDF(currentFile);
-
-      setStatus('יוצר מסמך Word (DOCX)…', true);
-      const docxBlob = await buildDocxFromText(text, { rtl: true, pages });
-
-      setStatus('מוכן!');
-      out.value = text;
-      renderDownloads(docxBlob, text, currentFile.name);
-      meta.innerHTML = `מספר עמודים: <b>${pages}</b><br/>תאריך עיבוד: <b>${new Date().toLocaleString()}</b>`;
-    } catch(err){
-      console.error(err);
-      setStatus('אירעה שגיאה: ' + (err && err.message ? err.message : err), false, true);
-    }
-  });
-
-  function setStatus(msg, busy=false, isErr=false){
-    status.innerHTML = msg + (busy ? ' <span class="spinner"></span>' : '');
-    status.classList.toggle('err', !!isErr);
-  }
-
-  async function extractTextFromPDF(file){
-    const buf = await file.arrayBuffer();
-    const loadingTask = pdfjsLib.getDocument({ data: buf });
-    const pdf = await loadingTask.promise;
-    const pages = pdf.numPages;
-
-    let all = [];
-    for(let i=1;i<=pages;i++){
-      const page = await pdf.getPage(i);
-      const content = await page.getTextContent();
-      // חיבור פריטי הטקסט; אין שחזור עימוד מלא, אך נפריד עמודים
-      const line = content.items.map(it => it.str).join(' ');
-      all.push(`=== עמוד ${i} ===\n` + line.trim());
-    }
-    return { text: all.join('\n\n'), pages };
-  }
-
-  async function buildDocxFromText(text, { rtl=false, pages=0 }={}){
-    // פיצול לפסקאות לפי שורות
-    const paragraphs = [];
-    const lines = text.split(/\n/);
-    for(const ln of lines){
-      paragraphs.push(new Paragraph({
-        children:[ new TextRun({ text: ln }) ],
-        rightToLeft: rtl,
-        alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
-      }));
-    }
-
-    const doc = new Document({
-      sections: [{
-        properties: {},
-        children: [
-          new Paragraph({
-            children:[ new TextRun({ text: 'טקסט שחולץ מקובץ PDF', bold: true }) ],
-            spacing: { after: 200 },
-            rightToLeft: rtl,
-            alignment: rtl ? AlignmentType.RIGHT : AlignmentType.LEFT,
-          }),
-          ...paragraphs
-        ]
-      }]
-    });
-
-    return await Packer.toBlob(doc);
-  }
-
-  function renderDownloads(docxBlob, text, baseName){
-    downloads.innerHTML = '';
-    // קובץ DOCX
-    const docxUrl = URL.createObjectURL(docxBlob);
-    const docxA = document.createElement('a');
-    docxA.href = docxUrl;
-    docxA.download = (baseName.replace(/\.pdf$/i,'') || 'output') + '.docx';
-    docxA.textContent = 'הורד DOCX';
-    downloads.appendChild(docxA);
-
-    // קובץ TXT
-    const txtBlob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-    const txtUrl = URL.createObjectURL(txtBlob);
-    const txtA = document.createElement('a');
-    txtA.href = txtUrl;
-    txtA.download = (baseName.replace(/\.pdf$/i,'') || 'output') + '.txt';
-    txtA.textContent = 'הורד TXT';
-    downloads.appendChild(txtA);
-  }
-})();
-</script>
+  <script type="module" src="js/script.js"></script>
 </body>
 </html>

@@ -1,0 +1,9 @@
+{
+  "name": "hilan-salary-calculator",
+  "version": "1.0.0",
+  "description": "Hilan payroll calculator",
+  "private": true,
+  "scripts": {
+    "test": "echo 'No tests defined'"
+  }
+}
