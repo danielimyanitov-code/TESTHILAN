@@ -1,60 +1,501 @@
-<!DOCTYPE html>
-<html lang="he" dir="rtl">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>מחשבון שכר חילן</title>
-  <link rel="stylesheet" href="css/style.css" />
-  <!-- ספריית PDF.js לקריאת קובצי PDF -->
-  <script src="https://unpkg.com/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
-</head>
-<body>
-  <main class="salary-calculator">
-    <header class="salary-calculator__header">
-      <h1>מחשבון שכר חילן</h1>
-    </header>
+import React, { useMemo, useRef, useState } from "react";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { Download, Plus, Trash2, Upload as UploadIcon, FileText, Wand2 } from "lucide-react";
 
-    <section class="upload-section" aria-label="העלאת דוח">
-      <div id="dropZone" class="upload-section__zone" tabindex="0" role="button">
-        גררו קובץ PDF או לחצו לבחירה
-        <input id="fileInput" type="file" accept="application/pdf" hidden />
+// === עזרי זמן ===
+const parseHM = (str) => {
+  if (!str) return 0; // דקות
+  const [h, m] = String(str).split(":").map(Number);
+  if (Number.isNaN(h) || Number.isNaN(m)) return 0;
+  return h * 60 + m;
+};
+const fmtHM = (mins) => {
+  const sign = mins < 0 ? "-" : "";
+  const abs = Math.abs(mins);
+  const h = Math.floor(abs / 60);
+  const m = Math.round(abs % 60);
+  return `${sign}${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
+};
+const diffHM = (start, end) => {
+  // תומך בלילה (מעבר חצות)
+  let s = parseHM(start);
+  let e = parseHM(end);
+  if (e < s) e += 24 * 60;
+  return e - s;
+};
+
+// === סוג רשומה ===
+function emptyRow(dateStr = "") {
+  return {
+    date: dateStr, // YYYY-MM-DD
+    start: "",
+    end: "",
+    breakMins: 0,
+    comment: "",
+    isHoliday: false,
+    isWeekend: false,
+  };
+}
+
+export default function App() {
+  // RTL לכל האפליקציה
+  React.useEffect(() => {
+    document.documentElement.dir = "rtl";
+    document.documentElement.lang = "he";
+  }, []);
+
+  const [rows, setRows] = useState([emptyRow()]);
+
+  // הגדרות חישוב
+  const [settings, setSettings] = useState({
+    hourlyRate: 40, // ש"ח לשעה
+    baseMonthlyHours: 186, // שעות תקן לחודש
+    overtime1ThresholdDaily: 8 * 60, // אחרי 8 שעות ביום
+    overtime1Rate: 1.25, // 125%
+    overtime2Rate: 1.5, // 150%
+    weekendRate: 1.5, // שבת/חג
+    roundTo: 1, // דקות עיגול
+    includeBreaksInOvertime: false,
+  });
+
+  const addRow = () => setRows((r) => [...r, emptyRow()]);
+  const removeRow = (idx) => setRows((r) => r.filter((_, i) => i !== idx));
+
+  // === מצב ייבוא אוטומטי ===
+  const fileRef = useRef(null);
+  const autoFileRef = useRef(null);
+  const [importing, setImporting] = useState(false);
+  const [importMsg, setImportMsg] = useState("");
+
+  // ייבוא CSV פשוט
+  const onCSV = async (file) => {
+    const text = await file.text();
+    // פורמט: date,start,end,breakMins,comment,isHoliday,isWeekend
+    const lines = text.trim().split(/\r?\n/);
+    const next = lines.slice(1).map((ln) => {
+      const [date, start, end, breakMins, comment, isHoliday, isWeekend] = ln
+        .split(",")
+        .map((s) => s?.trim());
+      return {
+        date,
+        start,
+        end,
+        breakMins: Number(breakMins || 0),
+        comment: comment || "",
+        isHoliday: (isHoliday || "").toLowerCase() === "true",
+        isWeekend: (isWeekend || "").toLowerCase() === "true",
+      };
+    });
+    setRows(next.length ? next : [emptyRow()]);
+  };
+
+  // יצוא CSV
+  const exportCSV = () => {
+    const header = "date,start,end,breakMins,comment,isHoliday,isWeekend";
+    const body = rows
+      .map((r) => [r.date, r.start, r.end, r.breakMins, r.comment, r.isHoliday, r.isWeekend].join(","))
+      .join("\n");
+    const blob = new Blob([header + "\n" + body], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "timesheet.csv";
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
+  // === OCR/PDF/Excel – ייבוא אוטומטי ===
+  const handleAutoImport = async (file) => {
+    if (!file) return;
+    setImporting(true);
+    setImportMsg("מתחיל ייבוא...");
+    try {
+      const type = file.type || "";
+      if (type.includes("image/")) {
+        const text = await ocrImage(file, setImportMsg);
+        const parsed = parseHilanText(text);
+        if (parsed.length) setRows(parsed);
+        setImportMsg(`נסרק מהתמונה. נמצאו ${parsed.length} ימים`);
+      } else if (type === "application/pdf") {
+        const text = await extractTextFromPDF(file, setImportMsg);
+        const parsed = parseHilanText(text);
+        if (parsed.length) setRows(parsed);
+        setImportMsg(`נותח ה-PDF. נמצאו ${parsed.length} ימים`);
+      } else if (file.name?.toLowerCase().endsWith(".xlsx") || file.name?.toLowerCase().endsWith(".xls")) {
+        const rows = await readXlsx(file);
+        if (rows.length) setRows(rows);
+        setImportMsg(`נקראו נתונים מ-Excel (${rows.length} ימים)`);
+      } else if (file.name?.toLowerCase().endsWith(".csv")) {
+        await onCSV(file);
+        setImportMsg("ייבוא CSV הושלם");
+      } else {
+        setImportMsg("סוג קובץ לא נתמך עדיין. נתמך: PDF/תמונה/CSV/Excel");
+      }
+    } catch (e) {
+      console.error(e);
+      setImportMsg("אירעה שגיאה בייבוא");
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  async function ocrImage(file, onStatus) {
+    const { default: Tesseract } = await import("tesseract.js");
+    onStatus && onStatus("מריץ OCR על תמונה...");
+    const { data } = await Tesseract.recognize(file, "heb+eng", {
+      logger: (m) => onStatus && onStatus(`${m.status || ""} ${Math.round((m.progress || 0) * 100)}%`),
+    });
+    return data.text || "";
+  }
+
+  async function extractTextFromPDF(file, onStatus) {
+    onStatus && onStatus("קורא PDF...");
+    const pdfjsLib = await import("pdfjs-dist/build/pdf");
+    // נסיון לקבוע workerSrc – אם אין בנדלר שמגדיר אוטומטית
+    try {
+      pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.6.82/build/pdf.worker.min.js";
+    } catch {}
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+    let fullText = "";
+
+    for (let p = 1; p <= pdf.numPages; p++) {
+      onStatus && onStatus(`מעבד עמוד ${p}/${pdf.numPages}`);
+      const page = await pdf.getPage(p);
+      // נעדיף OCR על תמונת עמוד לצורך דיוק בטבלאות מימין לשמאל
+      const viewport = page.getViewport({ scale: 2 });
+      const canvas = document.createElement("canvas");
+      const ctx = canvas.getContext("2d");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: ctx, viewport }).promise;
+      const blob = await new Promise((res) => canvas.toBlob(res));
+      const pageText = await ocrImage(blob, onStatus);
+      fullText += "\n" + pageText;
+    }
+    return fullText;
+  }
+
+  async function readXlsx(file) {
+    const XLSX = await import("xlsx");
+    const data = new Uint8Array(await file.arrayBuffer());
+    const wb = XLSX.read(data, { type: "array" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const json = XLSX.utils.sheet_to_json(ws, { defval: "" });
+    // מיפוי גמיש: נחפש עמודות שחוזרות על עצמן בשמות שונים
+    const keys = Object.keys(json[0] || {});
+    const dateKey = keys.find((k) => /תאריך|date/i.test(k)) || keys[0];
+    const inKey = keys.find((k) => /כניסה|start|in/i.test(k)) || keys[1];
+    const outKey = keys.find((k) => /יציאה|end|out/i.test(k)) || keys[2];
+    const breakKey = keys.find((k) => /הפסקה|break/i.test(k));
+
+    return json
+      .map((r) => ({
+        date: normalizeDate(String(r[dateKey] || "")),
+        start: String(r[inKey] || ""),
+        end: String(r[outKey] || ""),
+        breakMins: Number(r[breakKey] || 0),
+        comment: "",
+        isHoliday: false,
+        isWeekend: false,
+      }))
+      .filter((r) => r.date && /\d{1,2}:\d{2}/.test(r.start) && /\d{1,2}:\d{2}/.test(r.end));
+  }
+
+  // === Parser לדוח חילן מטקסט OCR ===
+  function normalizeDigitsRTL(s) {
+    // הופך זוגות "24:08" שנבלעו הפוך ל"08:24" אם התבנית נראית שגויה
+    return s.replace(/(\d{2}):(\d{2})/g, (m, a, b) => {
+      // אם יש הרבה מופעים של 70:83 וכו' נשאיר. כאן רק ננרמל בשלב הפקה.
+      return `${a}:${b}`;
+    });
+  }
+
+  function normalizeDate(d) {
+    // קלט: 01/08 או 1.8 או 2025-08-01
+    if (!d) return "";
+    const m = String(d).match(/(\d{1,2})[./-](\d{1,2})(?:[./-](\d{2,4}))?/);
+    if (m) {
+      const dd = m[1].padStart(2, "0");
+      const MM = m[2].padStart(2, "0");
+      const yyyy = m[3] ? String(m[3]).padStart(4, "20") : new Date().getFullYear();
+      return `${yyyy}-${MM}-${dd}`;
+    }
+    // ייתכן שכבר ISO
+    if (/\d{4}-\d{2}-\d{2}/.test(d)) return d;
+    return "";
+  }
+
+  function parseHilanText(text) {
+    const lines = normalizeDigitsRTL(text || "").split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    const result = [];
+    for (const ln of lines) {
+      // חפש שורה עם תאריך + 2 זמני HH:MM
+      const dateMatch = ln.match(/(\d{1,2}[./-]\d{1,2}(?:[./-]\d{2,4})?)/);
+      const times = ln.match(/\b(\d{1,2}:\d{2})\b/g);
+      if (dateMatch && times && times.length >= 2) {
+        const date = normalizeDate(dateMatch[1]);
+        const start = times[0];
+        const end = times[times.length - 1]; // אם יש כמה זמנים ניקח ראשון ואחרון
+        // חיפוש הפסקה: תבנית כמו 0:30 או "הפסקה 30"
+        let breakMins = 0;
+        const br = ln.match(/(\d{1,2}):(\d{2})\s*ה?פסק/);
+        if (br) breakMins = parseInt(br[1], 10) * 60 + parseInt(br[2], 10);
+        result.push({ date, start, end, breakMins, comment: "", isHoliday: /ש|שבת|חג/.test(ln), isWeekend: /ש|שבת|חג/.test(ln) });
+      }
+    }
+    // קיבוץ לפי תאריך (אם היו כמה מופעים)
+    const byDate = new Map();
+    for (const r of result) {
+      if (!r.date) continue;
+      const prev = byDate.get(r.date);
+      if (!prev) byDate.set(r.date, r);
+      else {
+        // שמור את השעה המוקדמת ביותר ככניסה והמאוחרת ביותר כיציאה
+        const sMin = [prev.start, r.start].sort((a, b) => parseHM(a) - parseHM(b))[0];
+        const eMax = [prev.end, r.end].sort((a, b) => parseHM(b) - parseHM(a))[0];
+        byDate.set(r.date, { ...prev, start: sMin, end: eMax, breakMins: Math.max(prev.breakMins, r.breakMins) });
+      }
+    }
+    return Array.from(byDate.values());
+  }
+
+  // חישוב מפורט לכל יום
+  const dayCalc = (r) => {
+    const work = diffHM(r.start, r.end) - (Number(r.breakMins) || 0);
+    const round = settings.roundTo > 1 ? Math.round(work / settings.roundTo) * settings.roundTo : work;
+    if (r.isWeekend || r.isHoliday) {
+      return { reg: 0, ot1: 0, ot2: 0, weekend: Math.max(0, round) };
+    }
+    const base = Math.max(0, Math.min(round, settings.overtime1ThresholdDaily));
+    const overtime = Math.max(0, round - base);
+    const ot1 = Math.min(overtime, 2 * 60); // שתי שעות ראשונות 125%
+    const ot2 = Math.max(0, overtime - ot1); // יתר 150%
+    return { reg: base, ot1, ot2, weekend: 0 };
+  };
+
+  const totals = useMemo(() => {
+    return rows.reduce(
+      (acc, r) => {
+        const d = dayCalc(r);
+        acc.reg += d.reg;
+        acc.ot1 += d.ot1;
+        acc.ot2 += d.ot2;
+        acc.weekend += d.weekend;
+        return acc;
+      },
+      { reg: 0, ot1: 0, ot2: 0, weekend: 0 }
+    );
+  }, [rows, settings]);
+
+  const money = useMemo(() => {
+    const hr = Number(settings.hourlyRate) || 0;
+    const regPay = (totals.reg / 60) * hr;
+    const ot1Pay = (totals.ot1 / 60) * hr * settings.overtime1Rate;
+    const ot2Pay = (totals.ot2 / 60) * hr * settings.overtime2Rate;
+    const weekendPay = (totals.weekend / 60) * hr * settings.weekendRate;
+    const sum = regPay + ot1Pay + ot2Pay + weekendPay;
+    return { regPay, ot1Pay, ot2Pay, weekendPay, sum };
+  }, [totals, settings]);
+
+  // === בדיקות יחידה קלות ל-parser ===
+  React.useEffect(() => {
+    try {
+      console.group("Self tests – parser & time utils");
+      console.assert(parseHM("08:24") === 504, "parseHM 08:24 failed");
+      console.assert(fmtHM(504) === "08:24", "fmtHM 504 failed");
+      console.assert(diffHM("22:00", "06:00") === 8 * 60, "diff overnight failed");
+      const sample = `01/08 א 08:24 17:00\n02/08 ב 09:00 18:30 הפסקה 0:30`;
+      const parsed = parseHilanText(sample);
+      console.assert(parsed.length === 2 && parsed[0].start === "08:24" && parsed[1].end === "18:30", "parseHilanText basic failed");
+      console.groupEnd();
+    } catch (e) {
+      console.warn(e);
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen bg-gray-50 p-4 md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
+        <header className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3">
+          <h1 className="text-2xl md:text-3xl font-bold">מחשבון שכר לפי דו"ח שעות</h1>
+          <div className="flex gap-2">
+            <Button onClick={exportCSV} variant="secondary" className="rounded-2xl">
+              <Download className="h-4 w-4 ms-1" /> יצוא CSV
+            </Button>
+            <Button onClick={() => fileRef.current?.click()} className="rounded-2xl">
+              <UploadIcon className="h-4 w-4 ms-1" /> ייבוא CSV
+            </Button>
+            <input ref={fileRef} type="file" accept=".csv" className="hidden" onChange={(e) => e.target.files?.[0] && onCSV(e.target.files[0])} />
+          </div>
+        </header>
+
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle>הגדרות חישוב</CardTitle>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-3 gap-4">
+            <div>
+              <Label>שכר לשעה (ש"ח)</Label>
+              <Input type="number" value={settings.hourlyRate} onChange={(e) => setSettings({ ...settings, hourlyRate: Number(e.target.value) })} />
+            </div>
+            <div>
+              <Label>שעות תקן לחודש</Label>
+              <Input type="number" value={settings.baseMonthlyHours} onChange={(e) => setSettings({ ...settings, baseMonthlyHours: Number(e.target.value) })} />
+            </div>
+            <div>
+              <Label>סף שעות נוספות ליום (דקות)</Label>
+              <Input type="number" value={settings.overtime1ThresholdDaily} onChange={(e) => setSettings({ ...settings, overtime1ThresholdDaily: Number(e.target.value) })} />
+            </div>
+            <div>
+              <Label>תעריף שעות נוספות 1</Label>
+              <Input type="number" step="0.01" value={settings.overtime1Rate} onChange={(e) => setSettings({ ...settings, overtime1Rate: Number(e.target.value) })} />
+            </div>
+            <div>
+              <Label>תעריף שעות נוספות 2</Label>
+              <Input type="number" step="0.01" value={settings.overtime2Rate} onChange={(e) => setSettings({ ...settings, overtime2Rate: Number(e.target.value) })} />
+            </div>
+            <div>
+              <Label>תעריף שבת/חג</Label>
+              <Input type="number" step="0.01" value={settings.weekendRate} onChange={(e) => setSettings({ ...settings, weekendRate: Number(e.target.value) })} />
+            </div>
+            <div className="flex items-center gap-3">
+              <Switch checked={settings.includeBreaksInOvertime} onCheckedChange={(v) => setSettings({ ...settings, includeBreaksInOvertime: v })} />
+              <Label>להכליל הפסקות בחישוב סף שעות נוספות</Label>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle>ייבוא אוטומטי (PDF/תמונה/Excel)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col md:flex-row gap-3 items-start">
+            <div className="flex gap-2">
+              <input ref={autoFileRef} type="file" accept="application/pdf,image/*,.csv,.xlsx,.xls" className="hidden" onChange={(e) => e.target.files?.[0] && handleAutoImport(e.target.files[0])} />
+              <Button onClick={() => autoFileRef.current?.click()} className="rounded-2xl">
+                <Wand2 className="h-4 w-4 ms-1"/> בחר קובץ לניתוח אוטומטי
+              </Button>
+            </div>
+            <div className="text-sm text-gray-600 min-h-6">{importing ? `⏳ ${importMsg}` : importMsg}</div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle>קליטת שעות</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="grid grid-cols-12 gap-2 text-sm font-medium text-gray-600">
+              <div className="col-span-2">תאריך</div>
+              <div className="col-span-2">כניסה</div>
+              <div className="col-span-2">יציאה</div>
+              <div className="col-span-1">הפסקה (דק׳)</div>
+              <div className="col-span-2">הערות</div>
+              <div className="col-span-1">שבת/חג</div>
+              <div className="col-span-1">—</div>
+            </div>
+
+            {rows.map((r, idx) => (
+              <div key={idx} className="grid grid-cols-12 gap-2 items-center bg-white rounded-xl p-2 shadow-sm">
+                <Input type="date" className="col-span-2" value={r.date} onChange={(e) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, date: e.target.value } : x)))} />
+                <Input placeholder="08:24" className="col-span-2" value={r.start} onChange={(e) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, start: e.target.value } : x)))} />
+                <Input placeholder="17:00" className="col-span-2" value={r.end} onChange={(e) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, end: e.target.value } : x)))} />
+                <Input type="number" className="col-span-1" value={r.breakMins} onChange={(e) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, breakMins: Number(e.target.value) } : x)))} />
+                <Textarea className="col-span-2" rows={1} value={r.comment} onChange={(e) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, comment: e.target.value } : x)))} />
+                <div className="col-span-1 flex items-center gap-2">
+                  <Switch checked={r.isHoliday || r.isWeekend} onCheckedChange={(v) => setRows((all) => all.map((x, i) => (i === idx ? { ...x, isHoliday: v, isWeekend: v } : x)))} />
+                  <Label>כן</Label>
+                </div>
+                <div className="col-span-1 flex justify-end">
+                  <Button variant="ghost" onClick={() => removeRow(idx)}><Trash2 className="h-4 w-4" /></Button>
+                </div>
+
+                {/* שורה תחתונה – סיכום ליום */}
+                <div className="col-span-12 text-xs text-gray-600 flex gap-6 px-1">
+                  {(() => {
+                    const d = dayCalc(r);
+                    const total = d.reg + d.ot1 + d.ot2 + d.weekend;
+                    return (
+                      <>
+                        <span>סה"כ עבודה: <b>{fmtHM(total)}</b></span>
+                        <span>רגיל: <b>{fmtHM(d.reg)}</b></span>
+                        <span>נוס' 125%: <b>{fmtHM(d.ot1)}</b></span>
+                        <span>נוס' 150%: <b>{fmtHM(d.ot2)}</b></span>
+                        <span>שבת/חג: <b>{fmtHM(d.weekend)}</b></span>
+                      </>
+                    );
+                  })()}
+                </div>
+              </div>
+            ))}
+
+            <div className="flex gap-2">
+              <Button onClick={addRow} className="rounded-2xl"><Plus className="h-4 w-4 ms-1" /> הוסף יום</Button>
+              <Button variant="secondary" onClick={() => setRows([emptyRow()])} className="rounded-2xl">איפוס</Button>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle>סיכום חודש</CardTitle>
+          </CardHeader>
+          <CardContent className="grid md:grid-cols-4 gap-4">
+            <SummaryItem label="שעות רגילות" value={fmtHM(totals.reg)} />
+            <SummaryItem label="שעות נוספות 125%" value={fmtHM(totals.ot1)} />
+            <SummaryItem label="שעות נוספות 150%" value={fmtHM(totals.ot2)} />
+            <SummaryItem label="שעות שבת/חג" value={fmtHM(totals.weekend)} />
+
+            <div className="md:col-span-4 grid md:grid-cols-5 gap-4">
+              <MoneyItem label="שכר רגיל" value={money.regPay} />
+              <MoneyItem label="נוספות 125%" value={money.ot1Pay} />
+              <MoneyItem label="נוספות 150%" value={money.ot2Pay} />
+              <MoneyItem label="שבת/חג" value={money.weekendPay} />
+              <MoneyItem label={'סה"כ כולל'} value={money.sum} highlight />
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="rounded-2xl shadow-sm">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2"><FileText className="h-5 w-5"/> קבצים מצורפים (ללא ניתוח אוטומטי בשלב זה)</CardTitle>
+          </CardHeader>
+          <CardContent className="flex flex-col md:flex-row gap-3 items-start">
+            <input type="file" accept="application/pdf,image/*" />
+            <p className="text-sm text-gray-600">ניתן לצרף את דוח ה־PDF/תמונה לשמירה. בשלב הבא אפשר לחבר OCR כדי למלא את הטבלה אוטומטית.</p>
+          </CardContent>
+        </Card>
+
+        <footer className="text-center text-xs text-gray-500 pt-4">
+          נבנה בשבילך – גרסת MVP. אפשר להרחיב לייבוא אוטומטי מה־PDF של חילן, יצוא ל־Excel/PDF, ו־API.
+        </footer>
       </div>
-    </section>
+    </div>
+  );
+}
 
-    <section class="controls" aria-label="הגדרות חישוב">
-      <label for="baseRate" class="controls__label">תעריף בסיס (₪ לשעה)</label>
-      <input id="baseRate" type="number" step="0.01" value="0" class="controls__input" />
-    </section>
+function SummaryItem({ label, value }) {
+  return (
+    <div className="rounded-2xl bg-white p-4 shadow-sm">
+      <div className="text-sm text-gray-600">{label}</div>
+      <div className="text-xl font-semibold">{value}</div>
+    </div>
+  );
+}
 
-    <section class="calculator-section" aria-label="חישוב שכר">
-      <table class="salary-table" role="table">
-        <thead>
-          <tr>
-            <th>קוד</th>
-            <th>תיאור</th>
-            <th>שעות</th>
-            <th>אחוז</th>
-            <th>סה"כ</th>
-          </tr>
-        </thead>
-        <tbody id="salaryBody"></tbody>
-        <tfoot>
-          <tr>
-            <td colspan="4">סה"כ הכל</td>
-            <td id="totalSalary">₪0.00</td>
-          </tr>
-        </tfoot>
-      </table>
-    </section>
-
-    <section class="actions" aria-label="פעולות">
-      <button id="exportBtn" class="actions__btn">ייצוא CSV</button>
-      <button id="clearBtn" class="actions__btn actions__btn--ghost">ניקוי</button>
-    </section>
-
-    <div id="status" class="status" role="alert" aria-live="polite"></div>
-  </main>
-
-  <script type="module" src="js/script.js"></script>
-</body>
-</html>
+function MoneyItem({ label, value, highlight }) {
+  const fmt = new Intl.NumberFormat("he-IL", { style: "currency", currency: "ILS", maximumFractionDigits: 2 }).format(value || 0);
+  return (
+    <div className={`rounded-2xl p-4 shadow-sm ${highlight ? "bg-emerald-50" : "bg-white"}`}>
+      <div className="text-sm text-gray-600">{label}</div>
+      <div className="text-xl font-semibold">{fmt}</div>
+    </div>
+  );
+}
