@@ -393,8 +393,11 @@ async function processFile(file){
       fullText += pageText + '\n';
     }
     
+    // ניקוי הטקסט - הסרת רווחים מיותרים בין תווים
+    fullText = cleanPdfText(fullText);
+    
     // שמור את הטקסט המלא לקונסול (לדיבוג)
-    console.log('📄 טקסט מלא מה-PDF:');
+    console.log('📄 טקסט מלא מה-PDF (אחרי ניקוי):');
     console.log(fullText);
     console.log('---END OF PDF TEXT---');
     
@@ -444,6 +447,40 @@ async function processFile(file){
     console.error('שגיאה מפורטת:', err);
     showStatus('error', errorMsg);
   }
+}
+
+// ===== ניקוי טקסט PDF =====
+function cleanPdfText(text) {
+  // הסרת רווחים מיותרים בין תווים בודדים
+  // דוגמה: "5 2 / 0 9" -> "52/09"
+  
+  // שלב 1: הסרת רווחים בין מספרים ותווים מיוחדים
+  text = text.replace(/(\d)\s+(?=\d)/g, '$1'); // מספר רווח מספר -> מספר-מספר
+  text = text.replace(/(\d)\s+([\/\-\:\.])/g, '$1$2'); // מספר רווח סימן -> מספר-סימן
+  text = text.replace(/([\/\-\:\.])\s+(\d)/g, '$1$2'); // סימן רווח מספר -> סימן-מספר
+  
+  // שלב 2: הסרת רווחים בין אותיות עבריות (כשיש רווח בין כל אות)
+  // אם יש יותר מ-3 רווחים ברצף בשורה עם עברית - זה כנראה בעיה
+  text = text.split('\n').map(line => {
+    // ספור כמה רווחים בודדים יש בשורה
+    const singleSpaces = (line.match(/\S\s(?=\S)/g) || []).length;
+    const totalChars = line.replace(/\s/g, '').length;
+    
+    // אם יש הרבה רווחים בודדים ביחס לתווים - הסר אותם
+    if (singleSpaces > totalChars * 0.5) {
+      // הסר רווחים בין תווים בודדים
+      return line.replace(/(\S)\s+(?=\S)/g, '$1');
+    }
+    return line;
+  }).join('\n');
+  
+  // שלב 3: ניקוי כפילויות רווחים
+  text = text.replace(/\s{2,}/g, ' ');
+  
+  // שלב 4: ניקוי רווחים מיותרים בתחילת/סוף שורות
+  text = text.split('\n').map(line => line.trim()).join('\n');
+  
+  return text;
 }
 
 // ===== זיהוי קודי חילן =====
