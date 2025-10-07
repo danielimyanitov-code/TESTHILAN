@@ -46,6 +46,7 @@ document.addEventListener('DOMContentLoaded', () => {
 // ===== סיסמא =====
 function setupPasswordModal() {
   const modal = document.getElementById('passwordModal');
+  const form = document.getElementById('passwordForm');
   const input = document.getElementById('passwordInput');
   const submit = document.getElementById('passwordSubmit');
   const error = document.getElementById('passwordError');
@@ -57,15 +58,33 @@ function setupPasswordModal() {
     return;
   }
 
-  function checkPassword() {
-    const password = input.value;
+  function checkPassword(e) {
+    if (e) {
+      e.preventDefault(); // מונע שליחת טופס
+    }
+    
+    const password = input.value.trim();
+    
+    if (!password) {
+      error.textContent = 'נא להזין סיסמא';
+      input.focus();
+      return;
+    }
+    
     if (password === PASSWORD) {
       sessionStorage.setItem('chilan_authenticated', 'true');
+      error.textContent = '';
       showMainContent();
     } else {
-      error.textContent = 'סיסמא שגויה';
+      error.textContent = 'סיסמא שגויה - נסה שוב';
       input.value = '';
       input.focus();
+      
+      // הוסף אנימציה של רעד לשדה
+      input.style.animation = 'shake 0.5s';
+      setTimeout(() => {
+        input.style.animation = '';
+      }, 500);
     }
   }
 
@@ -75,13 +94,17 @@ function setupPasswordModal() {
     initializeApp();
   }
 
-  submit.addEventListener('click', checkPassword);
-  input.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') checkPassword();
+  // Event listeners
+  form.addEventListener('submit', checkPassword);
+  submit.addEventListener('click', (e) => {
+    e.preventDefault();
+    checkPassword();
   });
 
   // התמקד בשדה הסיסמא
-  input.focus();
+  setTimeout(() => {
+    input.focus();
+  }, 100);
 }
 
 function initializeApp() {
@@ -117,6 +140,37 @@ function wireUi(){
   }
 }
 
+// ===== המרת זמן =====
+function convertTimeToDecimal(timeValue) {
+  // אם הערך ריק או לא תקין
+  if (!timeValue || timeValue === '') return 0;
+  
+  const value = parseFloat(timeValue);
+  if (isNaN(value)) return 0;
+  
+  // אם זה מספר שלם או עם עד 2 ספרות אחרי הנקודה
+  const strValue = timeValue.toString();
+  
+  // בדוק אם יש נקודה עשרונית
+  if (strValue.includes('.')) {
+    const parts = strValue.split('.');
+    const hours = parseInt(parts[0]) || 0;
+    const decimalPart = parts[1] || '0';
+    
+    // אם החלק העשרוני הוא 2 ספרות בדיוק (כמו 8.22 = 8 שעות ו-22 דקות)
+    if (decimalPart.length === 2) {
+      const minutes = parseInt(decimalPart);
+      if (minutes >= 0 && minutes <= 59) {
+        // זה פורמט של זמן - המר לעשרוני
+        return hours + (minutes / 60);
+      }
+    }
+  }
+  
+  // אחרת - זה כבר מספר עשרוני תקין
+  return value;
+}
+
 // ===== טבלה =====
 function initializeTable(){
   const tbody = document.getElementById('salaryTableBody');
@@ -134,7 +188,9 @@ function initializeTable(){
         <input type="number" value="${row.hours}" step="0.01"
           class="hours-input" inputmode="decimal"
           aria-label="שעות עבור ${row.type}"
-          onchange="updateHours(${index}, this.value)">
+          data-row-index="${index}"
+          onchange="updateHours(${index}, this.value)"
+          onblur="handleTimeInput(${index}, this)">
       </td>
       <td class="amount-cell" id="amount-${index}">${ILS.format(0)}</td>
     `;
@@ -142,8 +198,28 @@ function initializeTable(){
   });
 }
 
+function handleTimeInput(index, inputElement) {
+  const originalValue = inputElement.value;
+  const convertedValue = convertTimeToDecimal(originalValue);
+  
+  // אם הערך השתנה (כלומר, היה זמן שהומר)
+  if (convertedValue !== parseFloat(originalValue)) {
+    // הצג tooltip או הודעה קצרה
+    const previousValue = inputElement.value;
+    inputElement.value = convertedValue.toFixed(2);
+    
+    // הצג הודעה זמנית
+    inputElement.title = `המרה: ${previousValue} → ${convertedValue.toFixed(2)} שעות`;
+    
+    // עדכן את הערך בנתונים
+    salaryData[index].hours = convertedValue;
+    calculateSalary();
+  }
+}
+
 function updateHours(i, h){
-  salaryData[i].hours = parseFloat(h) || 0;
+  const convertedValue = convertTimeToDecimal(h);
+  salaryData[i].hours = convertedValue;
   calculateSalary();
 }
 
@@ -320,6 +396,11 @@ async function processFile(file){
       fullText += pageText + '\n';
     }
     
+    // שמור את הטקסט המלא לקונסול (לדיבוג)
+    console.log('📄 טקסט מלא מה-PDF:');
+    console.log(fullText);
+    console.log('---END OF PDF TEXT---');
+    
     const result = parseChilanData(fullText);
 
     if (result.success) {
@@ -351,16 +432,19 @@ async function processFile(file){
         summary += `• ${name}: ${result.data[key]}\n`;
       });
       
-      console.log('📊 נתונים מהדוח:', result.data);
+      summary += '\n💡 לדיבוג: פתח את הקונסול (F12) לראות את הטקסט המלא';
+      
+      console.log('📊 נתונים שזוהו:', result.data);
       console.log('📄 סוג דוח:', result.source);
       showStatus('success', summary);
     } else {
+      console.error('❌ זיהוי נכשל');
       showStatus('error', result.error);
     }
     
   } catch (err) {
     const errorMsg = '❌ שגיאה בעיבוד הקובץ: ' + (err?.message || err);
-    console.error('שגיאה:', err);
+    console.error('שגיאה מפורטת:', err);
     showStatus('error', errorMsg);
   }
 }
