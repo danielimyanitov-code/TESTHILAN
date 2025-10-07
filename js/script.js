@@ -52,11 +52,8 @@ function setupPasswordModal() {
   const error = document.getElementById('passwordError');
   const mainContent = document.getElementById('mainContent');
 
-  // בדיקה אם כבר הוזנה סיסמא
-  if (sessionStorage.getItem('chilan_authenticated') === 'true') {
-    showMainContent();
-    return;
-  }
+  // נקה אימות קודם (כך כל רענון דף יחזיר לסיסמא)
+  sessionStorage.removeItem('chilan_authenticated');
 
   function checkPassword(e) {
     if (e) {
@@ -330,7 +327,10 @@ function generatePreviewData() {
   lines.push(`⏰ סה"כ שעות: ${totalHours}`);
   lines.push('═══════════════════════════');
   lines.push('');
-
+  lines.push('💡 העתק את הנתונים הללו ל:');
+  lines.push('   • מייל למנהל/משאבי אנוש');
+  lines.push('   • דוח נוכחות מסכם');
+  lines.push('   • מערכת שכר החברה');
   
   return lines.join('\n');
 }
