@@ -3,7 +3,7 @@ const ILS = new Intl.NumberFormat('he-IL', { style: 'currency', currency: 'ILS',
 const F2 = n => Number.isFinite(n) ? n.toFixed(2) : '0.00';
 
 // סיסמת גישה
-const PASSWORD = "chilan2025";
+const PASSWORD = "2214";
 
 // ===== נתוני המשמרות =====
 const salaryData = [
