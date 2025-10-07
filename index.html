@@ -14,11 +14,20 @@
     <div class="password-content">
       <h2>🔐 הזנת סיסמא</h2>
       <p>נדרשת סיסמא לשימוש במחשבון השכר</p>
-      <div class="password-input-group">
-        <input type="password" id="passwordInput" placeholder="הזן סיסמא..." autocomplete="current-password">
-        <button id="passwordSubmit" class="btn btn-primary">כניסה</button>
-      </div>
-      <div id="passwordError" class="password-error"></div>
+      <form id="passwordForm" novalidate>
+        <div class="password-input-group">
+          <input 
+            type="password" 
+            id="passwordInput" 
+            name="password"
+            placeholder="הזן סיסמא..." 
+            autocomplete="current-password"
+            required
+            aria-label="הזנת סיסמא למערכת">
+          <button type="submit" id="passwordSubmit" class="btn btn-primary">כניסה</button>
+        </div>
+      </form>
+      <div id="passwordError" class="password-error" role="alert" aria-live="polite"></div>
       <div style="margin-top: 20px; font-size: 12px; color: var(--muted);">
         💡 פנה למנהל המערכת לקבלת הסיסמא
       </div>
@@ -135,6 +144,9 @@
                 <label class="label" for="mealDays">ימי אשל</label>
                 <input type="number" id="mealDays" value="0" step="1" min="0" class="hours-input" aria-label="מספר ימי אשל">
               </div>
+            </div>
+            <div style="margin-top: 12px; padding: 10px; background: linear-gradient(180deg, rgba(59,130,246,.08), rgba(59,130,246,.04)); border-radius: 8px; font-size: 13px; color: var(--muted); border: 1px solid rgba(59,130,246,.2);">
+              💡 <strong>טיפ להזנת שעות:</strong> ניתן להזין זמן כמו <code style="background: rgba(255,255,255,.1); padding: 2px 6px; border-radius: 4px;">8.22</code> (8 שעות ו-22 דקות) והמערכת תמיר אוטומטית ל-<code style="background: rgba(255,255,255,.1); padding: 2px 6px; border-radius: 4px;">8.37</code> שעות עשרוניות
             </div>
           </div>
 
